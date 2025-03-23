@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking Particles</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- MediaPipe Hands関連のスクリプト -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
+    <!-- Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+</head>
+<body>
+    <div id="container">
+        <!-- カメラ映像 -->
+        <video id="video" playsinline></video>
+        
+        <!-- 手のトラッキング描画用キャンバス -->
+        <canvas id="hand-canvas"></canvas>
+        
+        <!-- コントロールパネル -->
+        <div id="control-panel">
+            <button id="start-camera" class="control-button">カメラ開始</button>
+            <button id="capture-button" class="control-button">キャプチャ保存</button>
+            <button id="settings-button" class="control-button">設定</button>
+            <button id="reset-button" class="control-button">リセット</button>
+            <button id="fullscreen-button" class="control-button">全画面</button>
+        </div>
+        
+        <!-- キャプチャ一覧 -->
+        <div id="captures-panel">
+            <h3>キャプチャ一覧</h3>
+            <div id="captures-list"></div>
+        </div>
+        
+        <!-- ステータスバー -->
+        <div id="status-bar">
+            <div id="status-text">準備完了</div>
+            <div id="fps-counter">FPS: 0</div>
+        </div>
+    </div>
+    
+    <!-- 設定パネル（JSで動的に生成される部分もある） -->
+    <div id="settings-panel" class="settings-panel" style="display: none;">
+        <div class="settings-header">
+            <div class="settings-title">設定</div>
+            <button class="settings-close" type="button">×</button>
+        </div>
+        <form class="settings-form">
+            <!-- 粒子数 -->
+            <div class="settings-group">
+                <div class="settings-label-container">
+                    <label for="particle-count" class="settings-label">粒子数</label>
+                    <span id="particle-count-value" class="settings-value">1000 particles</span>
+                </div>
+                <input type="range" id="particle-count" class="settings-slider" min="100" max="5000" step="100" value="1000">
+            </div>
+            
+            <!-- 粒子サイズ -->
+            <div class="settings-group">
+                <div class="settings-label-container">
+                    <label for="particle-size" class="settings-label">粒子サイズ</label>
+                    <span id="particle-size-value" class="settings-value">0.5</span>
+                </div>
+                <input type="range" id="particle-size" class="settings-slider" min="0.1" max="3.0" step="0.1" value="0.5">
+            </div>
+            
+            <!-- 重力 -->
+            <div class="settings-group">
+                <div class="settings-label-container">
+                    <label for="gravity" class="settings-label">重力</label>
+                    <span id="gravity-value" class="settings-value">0.03</span>
+                </div>
+                <input type="range" id="gravity" class="settings-slider" min="-0.1" max="0.1" step="0.01" value="0.03">
+            </div>
+            
+            <!-- 摩擦 -->
+            <div class="settings-group">
+                <div class="settings-label-container">
+                    <label for="friction" class="settings-label">摩擦</label>
+                    <span id="friction-value" class="settings-value">0.98</span>
+                </div>
+                <input type="range" id="friction" class="settings-slider" min="0.9" max="1.0" step="0.01" value="0.98">
+            </div>
+            
+            <!-- 寿命 -->
+            <div class="settings-group">
+                <div class="settings-label-container">
+                    <label for="lifetime" class="settings-label">寿命</label>
+                    <span id="lifetime-value" class="settings-value">1500 frames</span>
+                </div>
+                <input type="range" id="lifetime" class="settings-slider" min="100" max="3000" step="100" value="1500">
+            </div>
+            
+            <!-- 放出レート -->
+            <div class="settings-group">
+                <div class="settings-label-container">
+                    <label for="emission-rate" class="settings-label">放出レート</label>
+                    <span id="emission-rate-value" class="settings-value">5/frame</span>
+                </div>
+                <input type="range" id="emission-rate" class="settings-slider" min="1" max="20" step="1" value="5">
+            </div>
+            
+            <!-- ハンドスケルトン表示 -->
+            <div class="settings-group checkbox-group">
+                <div class="checkbox-container">
+                    <input type="checkbox" id="show-skeleton" class="settings-checkbox" checked>
+                    <label for="show-skeleton" class="checkbox-label">手のスケルトンを表示</label>
+                </div>
+            </div>
+            
+            <!-- 色設定 -->
+            <div class="settings-group">
+                <label class="settings-label">粒子の色</label>
+                <div class="color-container" id="particle-colors-container">
+                    <input type="color" class="color-picker" id="particle-colors-0" value="#ff4444">
+                    <input type="color" class="color-picker" id="particle-colors-1" value="#44ff44">
+                    <input type="color" class="color-picker" id="particle-colors-2" value="#4444ff">
+                    <input type="color" class="color-picker" id="particle-colors-3" value="#ffff44">
+                    <input type="color" class="color-picker" id="particle-colors-4" value="#ff44ff">
+                    <button type="button" class="add-color-button">+</button>
+                </div>
+            </div>
+            
+            <!-- ボタン -->
+            <div class="settings-group settings-buttons">
+                <button type="button" class="settings-reset">設定をリセット</button>
+                <button type="button" class="settings-save">設定を保存</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- メインスクリプト（TypeモジュールとしてインポートするESモジュール） -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
